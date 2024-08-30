@@ -4,7 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const passport = require('passport');
 const session = require('express-session');
-const authRoutes = require('./routes/authRoutes');
+const authRoutes = require('./routes/auth');
 const passportSetup = require('./config/passport-setup');
 
 const app = express();
@@ -33,6 +33,43 @@ mongoose.connect(process.env.MONGO_URI, {
 }).then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error(err));
 
+  // Use GoogleStrategy
+passport.use(
+    new GoogleStrategy({
+      clientID: process.env.GOOGLE_CLIENT_ID,   // Ensure GOOGLE_CLIENT_ID is set
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET, // Ensure GOOGLE_CLIENT_SECRET is set
+      callbackURL: 'http://localhost:3000/auth/google/callback'
+    },
+    async (accessToken, refreshToken, profile, done) => {
+      try {
+        let user = await User.findOne({ googleId: profile.id });
+        if (user) {
+          return done(null, user);
+        }
+        user = new User({
+          googleId: profile.id,
+          name: profile.displayName,
+          email: profile.emails[0].value
+        });
+        await user.save();
+        done(null, user);
+      } catch (err) {
+        done(err, null);
+      }
+    })
+  );
+  
+  // Serialize user
+  passport.serializeUser((user, done) => {
+    done(null, user.id);
+  });
+  
+  // Deserialize user
+  passport.deserializeUser((id, done) => {
+    User.findById(id).then(user => {
+      done(null, user);
+    });
+  });
 // Start the server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
